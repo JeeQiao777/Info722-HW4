@@ -1,3 +1,198 @@
-444
-444456
-5565656
+import pandas as pd
+
+pd.set_option('display.max_columns', 50)
+
+# Import my CSV files
+df1 = pd.read_csv('C:\\Users\\Jiqiao\\Desktop 2\\number-of-deaths-by-risk-factor.csv')
+df2 = pd.read_csv('C:\\Users\\Jiqiao\\Desktop 2\\outdoor-pollution-rate-vs-gdp.csv')
+print(df1)
+print(df2)
+
+df1_sorted = df1.sort_values(by='air pollution', ascending=False)
+print(df1_sorted)
+
+top_10_countries = df1_sorted.head(10)
+print(top_10_countries[['Entity', 'air pollution']])
+
+import matplotlib.pyplot as plt
+
+# Create the scatter plot
+plt.scatter(df2['GDP per capita'], df2['Air pollution death per 100000 people'])
+plt.xlabel('GDP per capita')
+plt.ylabel('Air pollution death per 100,000 people')
+plt.title('Scatter Plot of GDP per capita vs Air Pollution Death Rate')
+plt.show()
+
+import matplotlib.pyplot as plt
+
+# Create the scatter plot 2
+plt.scatter(df1['low birth weight'], df1['air pollution'])
+plt.xlabel('Low Birth Weight')
+plt.ylabel('Air Pollution')
+plt.title('Scatter Plot of Low Birth Weight vs Air Pollution')
+plt.show()
+
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(10, 8))  # You can adjust the figure size based on the number of countries
+plt.scatter(df2['Entity'], df2['Air pollution death per 100000 people'])
+
+for i, txt in enumerate(df2['Entity']):
+    plt.annotate(txt, (df2['Entity'][i], df2['Air pollution death per 100000 people'][i]), textcoords="offset points",
+                 xytext=(0, 10), ha='center')
+
+plt.xlabel('Countries')
+plt.ylabel('Air Pollution Death per 100,000 People')
+plt.title('Air Pollution Death Rates by Country')
+plt.xticks(rotation=90)  # Rotate country names for better visibility if needed
+
+plt.show()
+
+# This is for null inputs
+print(df1.isnull().sum())
+print(df2.isnull().sum())
+
+# Check outliers
+print(df1.describe())
+print(df2.describe())
+
+# Filter outlier for df2
+df21 = df2[(df2['Entity'] != 'Abkhazia') & (df2['Air pollution death per 100000 people'] != 3000)]
+
+# Reduce dataset2 by getting rid of excessive years
+df22 = df21[(df21['Year'] >= 1990) & (df21['Year'] <= 2019)]
+print(df22)
+print(df22.describe())
+
+# Create new column of ratio by air pollution death
+df1['Ratio by air pollution'] = df1['air pollution'] / df1['Total Death']
+print(df1['Ratio by air pollution'])
+
+# Merge the two datasets
+df_merged = pd.merge(df1, df22,
+                     left_on=['Entity', 'Year'],
+                     right_on=['Entity', 'Year'],
+                     how='inner')
+print(df_merged)
+df_merged.to_csv('C:\\Users\\Jiqiao\\Desktop 2\\merged_dataset.csv', index=False)
+
+# Check format
+print(df_merged.dtypes)
+
+# Data reduction
+Entity_remove = [
+    "African Region (WHO)", "East Asia & Pacific (WB)",
+    "Eastern Mediterranean Region (WHO)", "Europe & Central Asia (WB)",
+    "European Region (WHO)", "G20", "High Income (WB)",
+    "Latin America & Caribbean (WB)", "Low Income (WB)",
+    "Lower Middle Income (WB)", "Middle East & North Africa (WB)",
+    "Middle Income (WB)", "North America (WB)", "OECD Countries",
+    "Region of the Americas (WHO)", "South Asia (WB)",
+    "South-East Asia Region (WHO)", "Sub-Saharan Africa (WB)",
+    "Western Pacific Region (WHO)", "World"
+]
+
+# Remove these entries from the DataFrame
+df3 = df_merged[~df_merged['Entity'].isin(Entity_remove)]
+print(df3)
+
+# Create a new column with log-transformed values of 'Population'
+import numpy as np
+
+df3.loc[:, 'Log_Population'] = np.log(df3['Population'])
+print(df3.loc)
+
+# Conduct simple linear regression for GDP per capita vs. air pollution death ratio
+print(df3['GDP per capita'].isna().sum())
+print(df3['Ratio by air pollution'].isna().sum())
+
+import numpy as np
+
+df3 = df3.replace([np.inf, -np.inf], np.nan)  # Replace inf with NaN
+df3 = df3.dropna(subset=['GDP per capita', 'Ratio by air pollution'])  # Drop rows with NaN
+
+import statsmodels.api as sm
+
+X = df3['GDP per capita']  # Independent variable
+y = df3['Ratio by air pollution']
+
+X = sm.add_constant(X)
+model = sm.OLS(y, X)
+# Fit the model
+results = model.fit()
+
+# Results
+print(results.summary())
+
+
+
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.regression import Lasso
+
+spark = SparkSession.builder.appName("Regression").getOrCreate()
+
+# Multi regression
+# Assemble features
+assembler = VectorAssembler(inputCols=['high systolic blood pressure', ..., 'Population'], outputCol="features")
+data = assembler.transform(df3)
+
+# Define and fit the model
+lr = LinearRegression(featuresCol='features', labelCol='Ratio by air pollution')
+model2 = lr.fit(data)
+print(model2.summary())
+
+# LASSO
+lasso = Lasso(featuresCol='features', labelCol='Ratio by air pollution')
+model_lasso = lasso.fit(data)
+
+
+# Regression with GDP per capita
+assembler = VectorAssembler(inputCols=['GDP per capita'], outputCol="features")
+data = assembler.transform(df3)
+
+lr = LinearRegression(featuresCol='features', labelCol='Air pollution death per 100000 people')
+model3 = lr.fit(data)
+print(model3.summary())
+
+
+# Model with selected features:
+assembler = VectorAssembler(
+    inputCols=['GDP per capita', 'unsafe sanitation', 'access to handwashing facility', 'diet low in fruits',
+               'iron deficiency'], outputCol="features")
+data = assembler.transform(df3)
+
+lr = LinearRegression(featuresCol='features', labelCol='Ratio by air pollution')
+model5 = lr.fit(data)
+print(model5.summary())
+
+# Assuming you've already initialized SparkSession and loaded data as df
+
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+import matplotlib.pyplot as plt
+
+# Assemble features (assuming 'GDP per capita' is the only feature for simplicity)
+assembler = VectorAssembler(inputCols=['GDP per capita'], outputCol='features')
+data = assembler.transform(df)
+
+# Define regression model and fit
+lr = LinearRegression(featuresCol='features', labelCol='predicted values')
+model = lr.fit(data)
+
+# Get predictions
+predictions = model.transform(data)
+
+# Collect data for plotting
+gdp_values = predictions.select('GDP per capita').rdd.flatMap(lambda x: x).collect()
+predicted_values = predictions.select('prediction').rdd.flatMap(lambda x: x).collect()
+
+# Plot using matplotlib
+plt.scatter(gdp_values, predicted_values, alpha=0.5)
+plt.title('GDP per capita vs Predicted Values')
+plt.xlabel('GDP per capita')
+plt.ylabel('Predicted Values')
+plt.show()
+
+
